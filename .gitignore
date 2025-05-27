@@ -1,0 +1,32 @@
+# Ignore all .log files
+*.log
+
+# Ignore a folder
+data/
+figures/
+archive/
+ss/
+diff_meth/
+prev_data/
+dicer/
+models/
+fmodels/
+
+# Ignore a specific file
+secrets.txt
+
+# Ignore R-related cache files
+.Rhistory
+.RData
+.Rproj.user/
+.Rproj/
+
+# Ignore Python virtual environments
+venv/
+
+# Ignore node modules
+node_modules/
+
+# Ignore compiled code
+*.o
+*.pyc
