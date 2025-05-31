@@ -1,10 +1,6 @@
----
+------------------------------------------------------------------------
 
 # DNA Methylation-based Prognosis of Pediatric Thyroid Carcinoma Invasiveness
-
-This study investigates DNA methylation patterns associated with
-invasiveness in pediatric thyroid cancer, providing insights into
-potential prognostic biomarkers and therapeutic targets.
 
 ## Repository Structure
 
@@ -24,26 +20,11 @@ project_root/
 └── LICENSE                 
 ```
 
-## Usage
-
-Run the scripts in the numbered order to reproduce the analysis and
-figures.
-
 ## Data Availability
 
-**Methylation Data**: Available in Gene Expression Omnibus with
-accession
-[**GSE296440**](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE296440)
+**Methylation Data**: Available in Gene Expression Omnibus with accession [**GSE296440**](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE296440)
 
-**Data Processing**: Informatics for array data preprocessing and
-functional analysis is available in the R/Bioconductor package
-**SeSAMe** (version 3.22+):
-<https://bioconductor.org/packages/release/bioc/html/sesame.html>
-
-## License
-
-This project is licensed under the **MIT License** - see the `LICENSE`
-file for details.
+**Data Processing**: Informatics for array data preprocessing and functional analysis is available in the R/Bioconductor package **SeSAMe** (version 3.22+): <https://bioconductor.org/packages/release/bioc/html/sesame.html>
 
 ## Support
 
