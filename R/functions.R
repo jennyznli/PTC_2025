@@ -1,8 +1,13 @@
 # ============================================================
 #   This script contains the necessary functions for analysis.
 # ============================================================
+
+# Extracts unique base probe IDs from EPICv2 format
 clean_probe_ids <- function(ids) unique(sapply(strsplit(ids, "_"), `[`, 1))
 
+# Removes rows/columns from matrix with missing data fraction above thresholds
+# Args: mtx - numeric matrix, f_row/f_col - max fraction missing allowed
+# Returns: filtered matrix
 cleanMatrixForClusterW <- function(mtx, f_row = 0.5, f_col = 0.5) {
     cat("Cleaning...")
     cat(sprintf("Filter rows with >%1.2f missingness and columns with >%1.2f missingness.\n",
@@ -17,6 +22,9 @@ cleanMatrixForClusterW <- function(mtx, f_row = 0.5, f_col = 0.5) {
     return(cleaned_mtx)
 }
 
+# Selects top n probes with highest standard deviation across samples
+# Args: betas - numeric matrix, n - number of top variable probes to select
+# Returns: subset matrix
 bSubMostVariable <- function(betas, n=3000) {
     print(paste("Original dimensions:", nrow(betas), "x", ncol(betas)))
     std <- apply(betas, 1, sd, na.rm=TRUE)
@@ -25,7 +33,9 @@ bSubMostVariable <- function(betas, n=3000) {
     return(result)
 }
 
-# wrapper for genomic neighbors
+# Performs parallel imputation of missing beta values by genomic neighbors
+# Args: beta_mat - matrix of betas, platform - methylation platform
+# Returns: imputed beta matrix
 imputeBetasByGenomicNeighborsMatrix <- function(beta_mat, platform = NULL,
                                                 BPPARAM = SerialParam(),
                                                 max_neighbors = 3, max_dist = 10000) {
@@ -38,7 +48,7 @@ imputeBetasByGenomicNeighborsMatrix <- function(beta_mat, platform = NULL,
         imputed_col <- imputeBetasByGenomicNeighbors(
             betas = betas_col,
             platform = platform,
-            BPPARAM = SerialParam(),  # inner function is not parallelized
+            BPPARAM = SerialParam(),
             max_neighbors = max_neighbors,
             max_dist = max_dist
         )
@@ -50,7 +60,9 @@ imputeBetasByGenomicNeighborsMatrix <- function(beta_mat, platform = NULL,
     return(imputed_mat)
 }
 
-# imputation
+# Imputes missing beta values using genomic neighbors and KNN
+# Args: betas - numeric matrix, platform - methylation platform string
+# Returns: fully imputed beta matrix
 impute <- function(betas, platform = "EPICv2") {
     cat("Imputation started...\n")
     original_nas <- sum(is.na(betas))
@@ -80,91 +92,26 @@ impute <- function(betas, platform = "EPICv2") {
     return(betas_final)
 }
 
-#' Create SummarizedExperiment with Quality Control
-#'
-#' @param betas Beta value matrix
-#' @param sample_sheet Sample metadata
-#' @param factors Character vector of factor column names to check
-#' @return Filtered SummarizedExperiment object
-create_se_with_qc <- function(betas, sample_sheet, factors) {
-    cat("Creating SummarizedExperiment...\n")
-    cat("Input dimensions - Betas:", dim(betas), "Sample sheet:", dim(sample_sheet), "\n")
-
-    # Create initial SE
-    se <- SummarizedExperiment(betas, colData = sample_sheet)
-
-    # Quality control checks
-    cat("Performing quality control checks...\n")
-    se_ok <- rep(TRUE, nrow(se))
-
-    for (factor_name in factors) {
-        if (factor_name %in% colnames(colData(se))) {
-            factor_check <- checkLevels(assay(se), colData(se)[[factor_name]])
-            se_ok <- se_ok & factor_check
-            cat("Factor", factor_name, "- Valid probes:", sum(factor_check), "\n")
-        } else {
-            warning("Factor '", factor_name, "' not found in sample data")
-        }
+# Saves Cytomethic prediction results to CSV file with optional sample names
+# Args: pred_list - list of predictions, filename - output CSV path,
+#       sample_names - optional vector for row names
+# Returns: data.frame of saved predictions
+save_cytomethic_results <- function(pred_list, filename, sample_names = NULL) {
+    df <- as.data.frame(do.call(rbind, lapply(pred_list, as.data.frame)))
+    if (!is.null(sample_names)) {
+        rownames(df) <- sample_names
+    } else {
+        rownames(df) <- names(pred_list)
     }
-
-    cat("Total probes passing QC:", sum(se_ok), "out of", length(se_ok), "\n")
-
-    # Filter to good probes
-    se_filtered <- se[se_ok, ]
-
-    cat("Final SE dimensions:", dim(se_filtered), "\n")
-    return(se_filtered)
+    filepath <- file.path(DATA_DIR, filename)
+    write.csv(df, filepath, row.names = TRUE)
+    cat("Saved", nrow(df), "Cytomethic predictions to", filename, "\n")
+    return(df)
 }
 
-#' Run Differential Methylation Analysis
-#'
-#' @param se SummarizedExperiment object
-#' @param formula Model formula as string
-#' @param analysis_name Name for progress messages
-#' @param n_workers Number of parallel workers
-#' @return DML results
-run_dml_analysis <- function(se, formula, analysis_name, n_workers = N_WORKERS) {
-    cat("=== RUNNING", toupper(analysis_name), "ANALYSIS ===\n")
-    cat("Formula:", formula, "\n")
-    cat("Samples:", ncol(se), "Probes:", nrow(se), "\n")
-
-    start_time <- Sys.time()
-
-    tryCatch({
-        cat("Starting DML analysis...\n")
-        smry <- DML(se, as.formula(formula),
-                    BPPARAM = BiocParallel::MulticoreParam(workers = n_workers))
-
-        cat("Extracting test results...\n")
-        res <- summaryExtractTest(smry)
-
-        end_time <- Sys.time()
-        cat("Analysis completed in:", round(difftime(end_time, start_time, units = "mins"), 2), "minutes\n")
-        cat("Results dimensions:", dim(res), "\n")
-        cat("First few results:\n")
-        print(head(res, 3))
-        cat("\n")
-
-        return(res)
-
-    }, error = function(e) {
-        cat("ERROR in", analysis_name, "analysis:", e$message, "\n")
-        cat("Trying with fewer workers...\n")
-
-        # Retry with fewer workers
-        smry <- DML(se, as.formula(formula),
-                    BPPARAM = BiocParallel::MulticoreParam(workers = max(1, n_workers/2)))
-        res <- summaryExtractTest(smry)
-
-        end_time <- Sys.time()
-        cat("Analysis completed (with reduced workers) in:",
-            round(difftime(end_time, start_time, units = "mins"), 2), "minutes\n")
-
-        return(res)
-    })
-}
-
-
+# Prepares enrichment dataframe for plotting filtered by FDR and minimum counts
+# Args: df - enrichment results, n_min/n_max - min/max entries, max_fdr - FDR cutoff
+# Returns: filtered and annotated dataframe ready for plotting
 preparePlotFDR <- function(df, n_min, n_max, max_fdr) {
     df <- df[df$nD >0,]
     df$FDR[df$FDR==0] <- .Machine$double.xmin
@@ -191,6 +138,9 @@ preparePlotFDR <- function(df, n_min, n_max, max_fdr) {
     df1
 }
 
+# Plots dotplot of enrichment results showing -log10(FDR) vs term with coloring by estimate
+# Args: df - enrichment results, n_min/n_max - min/max points to plot, max_fdr - cutoff
+# Returns: ggplot object
 plotDotFDR <- function(df, n_min = 10, n_max = 10, max_fdr = 0.05) {
     db1 <- FDR <- overlap <- estimate <- NULL
     stopifnot("estimate" %in% colnames(df) && "FDR" %in% colnames(df))
@@ -202,10 +152,27 @@ plotDotFDR <- function(df, n_min = 10, n_max = 10, max_fdr = 0.05) {
         theme_minimal()
 }
 
+# Converts input strings to lowercase and replaces spaces/dashes with underscores
+clean_label <- function(x) {
+    x %>%
+        tolower() %>%
+        gsub("[ -]", "_", .)
+}
 
+# Converts input strings to uppercase and replaces dashes with spaces
+prettify_name <- function(name) {
+    name <- gsub("_", " ", name)
+    name <- tools::toTitleCase(name)
+    return(name)
+}
 
-
-
+##
+get_sig_probes <- function(res, bh_col, est_col) {
+    res %>%
+        dplyr::filter(!!sym(bh_col) < 0.05,
+                      abs(!!sym(est_col)) > 0.2) %>%
+        mutate(Methylation = ifelse(!!sym(est_col) > 0.2, "Hyper", "Hypo"))
+}
 
 
 # sv_waterfall2 <- function(object, row_id = 1L, max_display = 10L,

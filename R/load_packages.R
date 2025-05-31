@@ -1,31 +1,24 @@
-# load_packages.R
-# Purpose: Install and load all required CRAN and Bioconductor packages
+# ============================================================
+# Install and load all required CRAN and Bioconductor packages
+# ============================================================
 
 cat("Loading required packages...\n")
 
-# ---- Setup ----
 set.seed(123)
 DATE <- format(Sys.Date(), "%Y%m%d")
-
-# load_packages.R
-# Purpose: Install and load all required packages
-
-# ---- Setup ----
-set.seed(123)
 
 # Install BiocManager if needed
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
     install.packages("BiocManager", quiet = TRUE)
 }
 
-# ---- Define Required Packages ----
 packages <- list(
     cran = c(
         "dplyr", "ggplot2", "readr", "tidyr", "plotly", "readxl", "here", "stringr",
         "Rtsne", "pheatmap", "RColorBrewer", "ggpubr", "ggrepel", "clusterProfiler",
         "msigdbr", "fgsea", "enrichplot", "pvclust", "tidyverse", "randomForest",
-        "sail", "RSNNS", "e1071", "caret", "ISLR", "pROC", "shapviz", "future",
-        "future.apply", "logger", "treeshap", "viridis", "pals"
+        "RSNNS", "e1071", "caret", "ISLR", "pROC", "shapviz", "future",
+        "future.apply", "logger", "treeshap", "viridis", "pals", "openxlsx"
     ),
     bioc = c(
         "BiocParallel", "sesame", "DESeq2", "limma", "AnnotationHub", "CytoMethIC",
@@ -33,7 +26,6 @@ packages <- list(
     )
 )
 
-# ---- Install and Load Function ----
 load_packages <- function(pkg_list) {
     # Install missing CRAN packages
     missing_cran <- pkg_list$cran[!sapply(pkg_list$cran, requireNamespace, quietly = TRUE)]
@@ -56,8 +48,5 @@ load_packages <- function(pkg_list) {
     message("All packages loaded successfully!")
 }
 
-# ---- Execute ----
 load_packages(packages)
 
-# ---- Confirm 'here' is working ----
-here::here()

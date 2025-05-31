@@ -6,11 +6,10 @@ data/
 figures/
 archive/
 ss/
-diff_meth/
-prev_data/
-dicer/
-models/
-fmodels/
+loocv_driver_model/
+loocv_invasiveness_model/
+ss/archive/
+scripts/archive/
 
 # Ignore a specific file
 secrets.txt

@@ -5,19 +5,18 @@
 #   predicting driver group in thyroid cancer samples
 #   using DNA methylation data.
 # ============================================================
-
 # ========================
 # CONFIGURATION
 # ========================
 N_WORKERS <- 20
-DATE <- format(Sys.DATE(), "%Y%m%d")
+set.seed(123)
 
 BASE_DIR <- "/home/lijz/thyroid"
 R_DIR <- file.path(BASE_DIR, "R")
 SS_DIR <- file.path(BASE_DIR, "ss")
 DATA_DIR <- file.path(BASE_DIR, "data")
 
-CL_DIR <- file.path(BASE_DIR, "loocv_driver_model")
+CL_DIR <- file.path(DATA_DIR, "loocv_driver_model")
 MODEL_DIR <- file.path(CL_DIR, "models")
 FEAT_DIR <- file.path(CL_DIR, "features")
 SUM_DIR <- file.path(CL_DIR, "summary")
@@ -28,16 +27,13 @@ dir.create(SUM_DIR, recursive = TRUE, showWarnings = FALSE)
 models_list <- list()
 pred_results <- data.frame()
 imp_results <- data.frame()
-feature_list <- c()
 
 source(file.path(R_DIR, "functions.R"))
 source(file.path(R_DIR, "color_keys.R"))
 source(file.path(R_DIR, "load_packages.R"))
 
-print("Configuration complete.")
-
 # ========================
-# Load Packages
+# PACKAGES
 # ========================
 required_packages <- c(
     "randomForest", "pROC", "caret", "mltools",
@@ -49,11 +45,12 @@ for (pkg in required_packages) {
 }
 
 # ========================
-# Core Functions
+# FUNCTIONS
 # ========================
 subset_feature_selection <- function(betas, batch_size, n_feat, train_idx, labels, n_trees = 500, fold = NULL) {
     n_probes <- nrow(betas)
     n_batches <- ceiling(n_probes/batch_size)
+
     fold_models <- list()
     fold_importance <- data.frame()
 
@@ -115,7 +112,7 @@ process_sample <- function(i, all_samples, betas, labels) {
         importance = TRUE
     )
 
-    # IMPORTANCE
+    # importance
     importance <- data.frame(
         Feature = rownames(model$importance),
         MeanDecreaseAccuracy = model$importance[,"MeanDecreaseAccuracy"],
@@ -131,15 +128,15 @@ process_sample <- function(i, all_samples, betas, labels) {
 
     importance$Fold <- i
 
-    # PREDICTIONS
+    # Predictions
     pred_probs <- predict(model, t(betas[sel_probes, valid_idx, drop=FALSE]), type = "prob")
     pred_class <- predict(model, t(betas[sel_probes, valid_idx, drop=FALSE]))
 
     preds <- data.frame(
-        Sample_ID = valid_idx,
+        IDAT = ss$IDAT[valid_idx],
         True_Label = labels[valid_idx],
         Predicted = pred_class,
-        Correct = (pred_class == labels[valid_idx]),
+        Accuracy = (pred_class == labels[valid_idx]),
         Fold = i
     )
 
@@ -150,7 +147,6 @@ process_sample <- function(i, all_samples, betas, labels) {
         safe_level_name <- gsub(" ", ".", gsub("-", ".", level_name))
         col_name <- paste0("Prob_", safe_level_name)
         preds[,col_name] <- pred_probs[,j]
-
         # Store the mapping between original level and column name
         if (j == 1) {
             preds$LevelToColMapping <- paste(level_name, "->", col_name)
@@ -158,11 +154,8 @@ process_sample <- function(i, all_samples, betas, labels) {
     }
     preds$LevelToColMapping <- NULL
 
-    # ========================
-    # SAVING RESULTS
-    # ========================
-    saveRDS(model, file.path(model_dir, paste0(date, "_model_sample", i, ".rds")))
-    saveRDS(importance, file.path(feat_dir, paste0(date, "_importance_sample", i, ".rds")))
+    saveRDS(model, file.path(MODEL_DIR, paste0("model_sample", i, ".rds")))
+    saveRDS(importance, file.path(FEAT_DIR, paste0("importance_sample", i, ".rds")))
 
     return(list(
         sample = i,
@@ -178,16 +171,15 @@ process_sample <- function(i, all_samples, betas, labels) {
 }
 
 # ========================
-# Main Execution
+# EXECUTION
 # ========================
-# Load data
 ss <- read_excel(file.path(SS_DIR, "pediatric_master.xlsx")) %>%
     dplyr::filter(Lymph_Node == "F", Driver_Group != "Indeterminate")
 
 betas <- readRDS(file.path(DATA_DIR, "ped_betas_primary_imputed.rds"))
 valid_ids <- ss$IDAT[ss$IDAT %in% colnames(betas)]
-betas <- betas[, valid_ids]
 ss <- ss[match(valid_ids, ss$IDAT), ]
+betas <- betas[, valid_ids]
 
 labels <- as.factor(ss$Driver_Group)
 
@@ -195,53 +187,41 @@ labels <- as.factor(ss$Driver_Group)
 all_samples <- 1:length(labels)
 print(paste("Total samples for LOOCV:", length(all_samples)))
 
-# Run LOOCV
 print("Starting LOOCV")
-param <- MulticoreParam(workers = 40)
-results <- bplapply(1:length(all_samples), function(i) process_sample(i, all_samples, betas, labels), BPPARAM = param)
+results <- bplapply(1:length(all_samples), function(i) process_sample(i, all_samples, betas, labels), BPPARAM = MulticoreParam(N_WORKERS))
 print("Completed all samples")
 
-# Process and combine results
+# ========================
+# ANALYSIS
+# ========================
 for (i in 1:length(results)) {
-    # Store the model
     models_list[[i]] <- results[[i]]$model
-
-    # Accumulate predictions
     pred_results <- rbind(pred_results, results[[i]]$preds)
-
-    # Accumulate importance scores
     imp_results <- rbind(imp_results, results[[i]]$importance)
-
-    # Accumulate selected features
-    feature_list <- c(feature_list, results[[i]]$selected_features)
 }
 
-# Calculate overall metrics for multiclass classification
 conf_matrix <- caret::confusionMatrix(
     data = as.factor(pred_results$Predicted),
     reference = as.factor(pred_results$True_Label)
 )
 
-# Calculate accuracy from predictions
-accuracy <- mean(pred_results$Correct)
+accuracy <- mean(pred_results$Accuracy)
 
-# Initialize overall metrics dataframe
 overall_metrics <- data.frame(
     Accuracy = accuracy,
     Overall_Kappa = conf_matrix$overall["Kappa"]
 )
 
-# Calculate multiclass ROC curves (one-vs-all)
+# multiclass ROC curves (one-vs-all)
 roc_list <- list()
 auc_values <- numeric(length(levels(labels)))
 
 for (i in 1:length(levels(labels))) {
     level <- levels(labels)[i]
-    # Create a safe column name that matches R's automatic name conversion
     safe_level_name <- gsub(" ", ".", gsub("-", ".", level))
     prob_col <- paste0("Prob_", safe_level_name)
 
-    # Verify the column exists
+    # verify the column exists
     if (!prob_col %in% colnames(pred_results)) {
         warning(paste("Column", prob_col, "not found in pred_results for level", level))
         print(paste("Available columns:", paste(colnames(pred_results), collapse=", ")))
@@ -249,7 +229,7 @@ for (i in 1:length(levels(labels))) {
         next
     }
 
-    # Create binary outcome (this class vs all others)
+    # binary outcome (this class vs all others)
     binary_outcome <- ifelse(pred_results$True_Label == level, 1, 0)
 
     # Diagnostic information
@@ -260,7 +240,6 @@ for (i in 1:length(levels(labels))) {
 
     # Calculate ROC if we have at least one sample of this class
     if (sum(binary_outcome) > 0 && sum(binary_outcome) < length(binary_outcome)) {
-        # Make sure we have valid data
         valid_indices <- !is.na(binary_outcome) & !is.na(pred_results[[prob_col]])
         if (sum(valid_indices) < 2) {
             warning("Not enough valid data points for ROC curve")
@@ -273,8 +252,6 @@ for (i in 1:length(levels(labels))) {
                            quiet = TRUE, direction = "<")  # Ensures proper direction
             roc_list[[level]] <- roc_obj
             auc_values[i] <- as.numeric(pROC::auc(roc_obj))
-
-            # Store coordinates for plotting
             coords <- coords(roc_obj, "all")
         }, error = function(e) {
             warning(paste("Error calculating ROC for class", level, ":", e$message))
@@ -305,19 +282,15 @@ for (level in levels(labels)) {
     binary_true <- ifelse(pred_results$True_Label == level, "Positive", "Negative")
     binary_pred <- ifelse(pred_results$Predicted == level, "Positive", "Negative")
 
-    # Diagnostic information
     cat("Processing one-vs-all for class:", level, "\n")
     cat("Positive true cases:", sum(binary_true == "Positive"), "\n")
     cat("Positive predicted cases:", sum(binary_pred == "Positive"), "\n")
 
-    # Create binary confusion matrix with error handling
     tryCatch({
         binary_conf <- confusionMatrix(
             data = factor(binary_pred, levels = c("Positive", "Negative")),
             reference = factor(binary_true, levels = c("Positive", "Negative"))
         )
-
-        # Extract metrics
         class_row <- data.frame(
             Class = level,
             Sensitivity = binary_conf$byClass["Sensitivity"],
@@ -331,7 +304,6 @@ for (level in levels(labels)) {
         per_class_metrics <- rbind(per_class_metrics, class_row)
     }, error = function(e) {
         warning(paste("Error in confusion matrix for class", level, ":", e$message))
-        # Create a row with NAs for metrics
         class_row <- data.frame(
             Class = level,
             Sensitivity = NA,
@@ -345,7 +317,6 @@ for (level in levels(labels)) {
     })
 }
 
-# Calculate macro-averaged metrics
 macro_metrics <- data.frame(
     Class = "Macro-Average",
     Sensitivity = mean(per_class_metrics$Sensitivity, na.rm = TRUE),
@@ -355,14 +326,8 @@ macro_metrics <- data.frame(
     F1 = mean(per_class_metrics$F1, na.rm = TRUE),
     BalancedAccuracy = mean(per_class_metrics$BalancedAccuracy, na.rm = TRUE)
 )
-
-# Add macro-averaged metrics to the bottom of per-class metrics
 per_class_metrics <- rbind(per_class_metrics, macro_metrics)
 
-# Save the metrics
-saveRDS(per_class_metrics, file.path(sum_dir, paste0(date, "_loocv_per_class_metrics.rds")))
-
-# Add macro-averaged metrics to overall metrics
 overall_metrics$Macro_Sensitivity <- macro_metrics$Sensitivity
 overall_metrics$Macro_Specificity <- macro_metrics$Specificity
 overall_metrics$Macro_Precision <- macro_metrics$Precision
@@ -371,18 +336,18 @@ overall_metrics$Macro_F1 <- macro_metrics$F1
 overall_metrics$Macro_BalancedAccuracy <- macro_metrics$BalancedAccuracy
 
 # ========================
-# Save Final Results
+# SAVE FINAL RESULTS
 # ========================
-write.csv(pred_results, file.path(sum_dir, paste0(date, "_loocv_all_predictions.csv")))
-saveRDS(conf_matrix, file.path(sum_dir, paste0(date, "_loocv_conf_matrix.rds")))
-saveRDS(feature_list, file.path(sum_dir, paste0(date, "_loocv_feature_list.rds")))
-saveRDS(overall_metrics, file.path(sum_dir, paste0(date, "_loocv_overall_metrics.rds")))
-saveRDS(models_list, file.path(sum_dir, paste0(date, "_loocv_model_list.rds")))
-saveRDS(roc_list, file.path(sum_dir, paste0(date, "_loocv_roc_curves.rds")))
-saveRDS(imp_results, file.path(sum_dir, paste0(date, "_loocv_imp_results.rds")))
+saveRDS(per_class_metrics, file.path(SUM_DIR, "loocv_per_class_metrics.rds"))
+write.csv(pred_results, file.path(SUM_DIR, "loocv_all_predictions.csv"), row.names = FALSE)
+saveRDS(conf_matrix, file.path(SUM_DIR, "loocv_conf_matrix.rds"))
+saveRDS(overall_metrics, file.path(SUM_DIR, "loocv_overall_metrics.rds"))
+saveRDS(models_list, file.path(SUM_DIR, "loocv_model_list.rds"))
+saveRDS(roc_list, file.path(SUM_DIR, "loocv_roc_curves.rds"))
+saveRDS(imp_results, file.path(SUM_DIR, "loocv_imp_results.rds"))
 
-# Print final metrics
 print("LOOCV Complete")
 print(overall_metrics)
 print(conf_matrix)
+write.csv(overall_metrics, file.path(SUM_DIR, "loocv_overall_metrics.csv"), row.names = FALSE)
 

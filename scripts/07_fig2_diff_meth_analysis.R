@@ -1,31 +1,28 @@
 # ============================================================
-#   This script contains the analysis for Fig. 2, including:
-#   Differential methylation between high v. low Clinical_Invasiveness
+#   FIG 2.
+#   This script contains the downstream differential methylation (DM)
+#   analysis for Invasiveness and Methylation Clusters
+#   2A Invasiveness volcano plot
+#   2B 88 primary tumor DM heatmap
+#   2C Invasiveness DMP enrichment tissue dot plot
+#   2D Invasiveness DMP enrichment TFBS dot plot
 #
-#   2A Volcano plot high v. low Clinical_Invasiveness
-#   2B Heatmap 88 primary tumor samples
-#   2C Dot plot
-#   2D Dot plot
-#
-#   S2A Heatmap 111 LN & primary tumor samples
+#   S2A 111 primary + LN DM heatmap
 #   S2B DMP composition
-#   S2C Barplot global methylation of cluster
-#   S2D Barplot global methylation of driver groups
-#   S2E Dot plot
-#   S2F Dot plot
-#   S2G Dot plot
-
+#   S2C Global methylation of cluster bar plot
+#   S2D Global methylation of driver groups bar plot
+#   S2E-G Cluster DMP enrichment dot plots (tissue, TFBS)
 # ============================================================
 # ========================
 # CONFIGURATION
 # ========================
 N_WORKERS <- 20
 
-BASE_DIR <- here()
+BASE_DIR <- "/Users/jennyzli/Documents/HPC_share/thyroid"
 R_DIR <- file.path(BASE_DIR, "R")
 SS_DIR <- file.path(BASE_DIR, "ss")
 DATA_DIR <- file.path(BASE_DIR, "data")
-FIG_DIR <- file.path(BASE_DIR, "figures", "final")
+FIG_DIR <- file.path(BASE_DIR, "figures")
 
 source(file.path(R_DIR, "functions.R"))
 source(file.path(R_DIR, "color_keys.R"))
@@ -36,27 +33,30 @@ source(file.path(R_DIR, "load_packages.R"))
 # ========================
 res <- readRDS(file.path(DATA_DIR, "ped88_dm_invasiveness_bh.rds"))
 res$threshold <- "NS"
-res$threshold[res$Pval_Clinical_InvasivenessHigh < 0.05 & res$Est_Clinical_InvasivenessHigh > 0.2] <- "Up"
-res$threshold[res$Pval_Clinical_InvasivenessHigh < 0.05 & res$Est_Clinical_InvasivenessHigh < -0.2] <- "Down"
+res$threshold[res$BH_Clinical_InvasivenessHigh < 0.05 & res$Est_Clinical_InvasivenessHigh > 0.2] <- "Hypermeth"
+res$threshold[res$BH_Clinical_InvasivenessHigh < 0.05 & res$Est_Clinical_InvasivenessHigh < -0.2] <- "Hypometh"
+print(table(res$threshold))
+# Hypermeth  Hypometh        NS
+# 2893     17233    812052
 
 sig_points <- subset(res, threshold != "NS")
 nonsig_points <- subset(res, threshold == "NS")
 
 p <- ggplot() +
     geom_bin2d(data = nonsig_points,
-               aes(x = Est_Clinical_InvasivenessHigh, y = -log10(Pval_Clinical_InvasivenessHigh)),
+               aes(x = Est_Clinical_InvasivenessHigh, y = -log10(BH_Clinical_InvasivenessHigh)),
                bins = 250) +
     scale_fill_gradient(low = "lightgray",
                         high = "black",
                         trans = "log10") + # log transform to better show density differences
     geom_point(data = sig_points,
-               aes(x = Est_Clinical_InvasivenessHigh, y = -log10(Pval_Clinical_InvasivenessHigh),
+               aes(x = Est_Clinical_InvasivenessHigh, y = -log10(BH_Clinical_InvasivenessHigh),
                    color = threshold),
                size = 0.1,
                alpha = 0.3) +
     scale_color_manual(values = c(
-        "Down" = "#0c66bcff",
-        "Up" = "#d61525ff"
+        "Hypometh" = "#0c66bcff",
+        "Hypermeth" = "#d61525ff"
     )) +
     geom_hline(yintercept = -log10(0.05), linetype = "dotted", color = "#575757ff") +
     geom_vline(xintercept = c(-0.2, 0.2), linetype = "dotted", color = "#575757ff") +
@@ -69,8 +69,8 @@ p <- ggplot() +
         legend.title = element_blank()
     ) +
     labs(
-        x = "Estimate",
-        y = "-log10(FDR)"
+        x = "Methylation Difference",
+        y = "-log10(P-value)"
     ) +
     guides(fill = "none")
 
@@ -88,7 +88,7 @@ res <- readRDS(file.path(DATA_DIR, "ped88_dm_invasiveness_bh.rds"))
 
 # Filter for significant probes
 sig_probes <- res %>%
-    dplyr::filter(Pval_Clinical_InvasivenessHigh < 0.05,
+    dplyr::filter(BH_Clinical_InvasivenessHigh < 0.05,
                   abs(Est_Clinical_InvasivenessHigh) > 0.2) %>%
     mutate(Methylation = ifelse(Est_Clinical_InvasivenessHigh > 0.2, "Hyper", "Hypo"))
 
@@ -137,7 +137,7 @@ ss <- read_excel(file.path(SS_DIR, "pediatric_master.xlsx"))
 res <- readRDS(file.path(DATA_DIR, "ped88_dm_invasiveness_bh.rds"))
 
 sig_probes <- res %>%
-    dplyr::filter(Pval_Clinical_InvasivenessHigh < 0.05,
+    dplyr::filter(BH_Clinical_InvasivenessHigh < 0.05,
                   abs(Est_Clinical_InvasivenessHigh) > 0.2) %>%
     mutate(Methylation = ifelse(Est_Clinical_InvasivenessHigh > 0.2, "Hyper", "Hypo"))
 
@@ -159,7 +159,7 @@ annotation_col <- data.frame(
 
 annotation_colors <- list(
     Cluster_Group = cluster_colors,
-    Clinical_Invasiveness = Clinical_Invasiveness_colors,
+    Clinical_Invasiveness = invasiveness_colors,
     Lymph_Node = lymph_node_colors,
     Methylation = methylation_colors
 )
@@ -186,29 +186,28 @@ dev.off()
 res1 <- readRDS(file.path(DATA_DIR, "ped88_dm_cluster_li_bh.rds"))
 res2 <- readRDS(file.path(DATA_DIR, "ped88_dm_cluster_hil_bh.rds"))
 
-# LI vs HI (GroupHI in res1)
-cat(dim(filter(res1, BH_GroupHI < 0.05, Est_Methylation_ClustersHI > 0.2))[1], "hyper (LI vs HI)\n")
-cat(dim(filter(res1, BH_GroupHI < 0.05, Est_Methylation_ClustersHI < -0.2))[1], "hypo (LI vs HI)\n\n")
+# LI vs HI (HI in res1)
+cat(dim(filter(res1, BH_Methylation_ClustersHI < 0.05, Est_Methylation_ClustersHI > 0.2))[1], "hyper (LI vs HI)\n")
+cat(dim(filter(res1, BH_Methylation_ClustersHI < 0.05, Est_Methylation_ClustersHI < -0.2))[1], "hypo (LI vs HI)\n\n")
+# 2649 hyper (LI vs HI)
+# 19288 hypo (LI vs HI)
 
-# LI vs HIL (GroupHIL in res1)
-cat(dim(filter(res1, BH_GroupHIL < 0.05, Est_Methylation_ClustersHIL > 0.2))[1], "hyper (LI vs HIL)\n")
-cat(dim(filter(res1, BH_GroupHIL < 0.05, Est_Methylation_ClustersHIL < -0.2))[1], "hypo (LI vs HIL)\n\n")
+# LI vs HIL (HIL in res1)
+cat(dim(filter(res1, BH_Methylation_ClustersHIL < 0.05, Est_Methylation_ClustersHIL > 0.2))[1], "hyper (LI vs HIL)\n")
+cat(dim(filter(res1, BH_Methylation_ClustersHIL < 0.05, Est_Methylation_ClustersHIL < -0.2))[1], "hypo (LI vs HIL)\n\n")
+# 61783 hyper (LI vs HIL)
+# 55801 hypo (LI vs HIL)
 
-# HIL vs HI (GroupHI in res2)
-cat(dim(filter(res2, BH_GroupHI < 0.05, Est_Methylation_ClustersHI > 0.2))[1], "hyper (HIL vs HI)\n")
-cat(dim(filter(res2, BH_GroupHI < 0.05, Est_Methylation_ClustersHI < -0.2))[1], "hypo (HIL vs HI)\n")
+# HIL vs HI (HI in res2)
+cat(dim(filter(res2, BH_Methylation_ClustersHI < 0.05, Est_Methylation_ClustersHI > 0.2))[1], "hyper (HIL vs HI)\n")
+cat(dim(filter(res2, BH_Methylation_ClustersHI < 0.05, Est_Methylation_ClustersHI < -0.2))[1], "hypo (HIL vs HI)\n")
+# 41333 hyper (HIL vs HI)
+# 70616 hypo (HIL vs HI)
 
-get_sig_probes <- function(res, bh_col, est_col) {
-    res %>%
-        dplyr::filter(!!sym(bh_col) < 0.05,
-                      abs(!!sym(est_col)) > 0.2) %>%
-        mutate(Methylation = ifelse(!!sym(est_col) > 0.2, "Hyper", "Hypo"))
-}
-
-sig_results <- list( # will have to fix the name of columns
-    "LI / HIL" = get_sig_probes(res1, "BH_GroupHIL", "Est_Methylation_ClustersHIL"),
-    "LI / HI" = get_sig_probes(res1, "BH_GroupHI", "Est_Methylation_ClustersHI"),
-    "HIL / HI" = get_sig_probes(res2, "BH_GroupHI", "Est_Methylation_ClustersHI")
+sig_results <- list(
+    "LI / HIL" = get_sig_probes(res1, "BH_Methylation_ClustersHIL", "Est_Methylation_ClustersHIL"),
+    "LI / HI" = get_sig_probes(res1, "BH_Methylation_ClustersHI", "Est_Methylation_ClustersHI"),
+    "HIL / HI" = get_sig_probes(res2, "BH_Methylation_ClustersHI", "Est_Methylation_ClustersHI")
 )
 
 data <- bind_rows(
@@ -217,7 +216,6 @@ data <- bind_rows(
             Group = group,
             table(sig_results[[group]]$Methylation)
         ) %>%
-            rename(DMPs = Freq) %>%
             arrange(desc(Var1))
     })
 )
@@ -231,7 +229,7 @@ total_dmps <- data.frame(
 data$Methylation <- factor(data$Var1, levels = c("Hyper", "Hypo"))
 
 pdf(file.path(FIG_DIR, "ped88_dm_cluster_composition.pdf"), width=4, height=4, onefile=FALSE)
-p <- ggplot(data, aes(x = Group, y = DMPs/10000)) +
+p <- ggplot(data, aes(x = Group, y = Freq/10000)) +
     geom_bar(aes(fill = Var1), stat = "identity", position = "stack") +
     scale_fill_manual(values = methylation_colors) +
     geom_text(data = total_dmps,

@@ -8,7 +8,8 @@
 # ========================
 N_WORKERS <- 20
 
-BASE_DIR <- "/home/lijz/thyroid"
+# BASE_DIR <- "/home/lijz/thyroid"
+BASE_DIR <- "~/Documents/HPC_share/thyroid"
 R_DIR <- file.path(BASE_DIR, "R")
 SS_DIR <- file.path(BASE_DIR, "ss")
 DATA_DIR <- file.path(BASE_DIR, "data")
@@ -59,7 +60,9 @@ betas <- betas[cg_probes, ]
 cat("After keeping only CG probes beta dimensions:", dim(betas), "\n")
 cat("Kept", length(cg_probes), "CG probes out of", length(probes), "total probes\n")
 
-betas <- betas[, match(ss$IDAT, colnames(betas))]
+common_ids <- intersect(ss$IDAT, colnames(betas))
+ss <- ss[match(common_ids, ss$IDAT), ]
+betas <- betas[, common_ids]
 saveRDS(betas, file.path(DATA_DIR, "ped_betas_processed.rds"))
 cat("After preprocessing beta dimensions:", dim(betas), "\n")
 
@@ -69,17 +72,25 @@ cat("After preprocessing beta dimensions:", dim(betas), "\n")
 betas_clean <- cleanMatrixForClusterW(betas)
 betas_imputed <- impute(betas_clean, "EPICv2")
 
+# save primary + tumor uncollapsed
+cat("Final primary & LN uncollapsed beta dimension:", dim(betas_imputed), "\n")
+saveRDS(betas_imputed, file.path(DATA_DIR, "ped_betas_imputed_uncollapsed.rds"))
+
+# save primary only uncollapsed
+betas_primary_imputed <- betas_imputed[, match(ss_primary$IDAT, colnames(betas_imputed))]
+cat("Final primary only uncollapsed beta dimension:", dim(betas_primary_imputed), "\n")
+saveRDS(betas_primary_imputed, file.path(DATA_DIR, "ped_betas_primary_imputed_uncollapsed.rds"))
+
 # collapse to pfx
 betas_collapsed <- betasCollapseToPfx(betas_imputed, BPPARAM = BiocParallel::MulticoreParam(N_WORKERS))
 cat("After collapsing to prefixes:", dim(betas_collapsed), "\n")
 
 # save primary + tumor
-cat("Final primary & LN beta dimension:", dim(betas_collapsed), "\n")
+cat("Final primary & LN collapsed beta dimension:", dim(betas_collapsed), "\n")
 saveRDS(betas_collapsed, file.path(DATA_DIR, "ped_betas_imputed.rds"))
 
 # save primary only
 betas_primary <- betas_collapsed[, match(ss_primary$IDAT, colnames(betas_collapsed))]
-cat("Final primary only beta dimension:", dim(betas_primary), "\n")
-
+cat("Final primary only collapsed beta dimension:", dim(betas_primary), "\n")
 saveRDS(betas_primary, file.path(DATA_DIR, "ped_betas_primary_imputed.rds"))
 

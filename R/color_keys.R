@@ -1,5 +1,5 @@
 # ========================
-# Color Keys
+# COLOR & SHAPE KEYS
 # ========================
 
 methylation_colors <- c(
@@ -68,6 +68,15 @@ m_colors <- c(
     "M1" = "#9808caff",
     "MX" = "lightgray",
     "NA" = "lightgray"
+)
+
+pair_colors <- c("#4f2288", "#538fcb", "#88CCEE", "#44AA99", "#117733", "#c9a90e", "#769b26",
+                 "#FF7F0EFF", "#cf4a17", "#9e0b22", "#AA4499", "#6F63BBFF")
+
+feature_colors <- c(
+    "Common" = "blue",
+    "Driver-specific" = "darkgreen",
+    "Invasiveness-specific" = "purple"
 )
 
 custom_shapes <- c("ADULT" = 16,  # Circle

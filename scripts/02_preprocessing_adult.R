@@ -69,6 +69,7 @@ cat("After preprocessing beta dimensions:", dim(betas), "\n")
 # clean and impute
 betas_clean <- cleanMatrixForClusterW(betas)
 betas_imputed <- impute(betas_clean, "HM450")
+colnames(betas_imputed) <- ss$Sample_ID
 
 # save primary + tumor
 cat("Final beta dimension:", dim(betas_imputed), "\n")

@@ -1,6 +1,8 @@
 # ============================================================
-#   Comprehensive Differential Methylation Analysis
-#   Figure 2 - Clinical Invasiveness and Cluster Group Comparisons
+#   FIG 2.
+#   This script performs differential methylation analysis
+#   for 88 primary tumor samples:
+#   Invasiveness & Methylation Clusters
 # ============================================================
 # ========================
 # CONFIGURATION
@@ -17,7 +19,7 @@ source(file.path(R_DIR, "color_keys.R"))
 source(file.path(R_DIR, "load_packages.R"))
 
 # ========================
-# ANALYSIS 1: Clinical Invasiveness COMPARISON
+# INVASIVENESS
 # ========================
 cat("=== CLINICAL INVASIVENESS ANALYSIS ===\n")
 
@@ -26,15 +28,12 @@ ss <- read_excel(file.path(SS_DIR, "pediatric_master.xlsx"))
 ss_primary <- ss %>% filter(Lymph_Node == "F")
 betas <- readRDS(file.path(DATA_DIR, "ped_betas_primary_imputed.rds"))
 
-# Prepare sample data
 ss_primary$Age <- as.numeric(ss_primary$Age)
 ss_primary$Sex <- as.factor(ss_primary$Sex)
 ss_primary$Clinical_Invasiveness <- as.factor(ss_primary$Clinical_Invasiveness)
 
-# Create SummarizedExperiment
 se <- SummarizedExperiment(betas, colData = ss_primary)
 
-# Quality control
 se_ok <- (checkLevels(assay(se), colData(se)$Sex) &
               checkLevels(assay(se), colData(se)$Clinical_Invasiveness))
 
@@ -42,14 +41,12 @@ cat("Probes passing QC:", sum(se_ok), "out of", length(se_ok), "\n")
 se <- se[se_ok, ]
 cat("Final SE dimensions:", dim(se), "\n")
 
-# Set reference levels
 colData(se)$Sex <- relevel(factor(colData(se)$Sex), "Female")
 colData(se)$Clinical_Invasiveness <- relevel(factor(colData(se)$Clinical_Invasiveness), "Low")
 
 cat("Reference levels - Sex:", levels(colData(se)$Sex)[1],
     "Clinical_Invasiveness:", levels(colData(se)$Clinical_Invasiveness)[1], "\n")
 
-# Run differential methylation analysis
 smry <- DML(se, ~Clinical_Invasiveness + Sex + Age,
             BPPARAM = BiocParallel::MulticoreParam(workers = N_WORKERS))
 res_inv <- summaryExtractTest(smry)
@@ -62,26 +59,22 @@ saveRDS(res_inv, file = file.path(DATA_DIR, "ped88_dm_invasiveness.rds"))
 cat("Clinical_Invasiveness differential methylation completed:", dim(res_inv), "\n")
 
 # ========================
-# ANALYSIS 2A: LI REFERENCE
+# CLUSTERS: LI REFERENCE
 # ========================
 cat("=== LI REFERENCE CLUSTER ANALYSIS ===\n")
 
-# Load data
 ss <- read_excel(file.path(SS_DIR, "pediatric_master.xlsx"))
 ss_primary <- ss %>% filter(Lymph_Node == "F")
 betas <- readRDS(file.path(DATA_DIR, "ped_betas_primary_imputed.rds"))
 
-# Prepare sample data
 ss_primary$Age <- as.numeric(ss_primary$Age)
 ss_primary$Sex <- as.factor(ss_primary$Sex)
 ss_primary$Methylation_Clusters <- as.factor(ss_primary$Methylation_Clusters)
 
 cat("Sample groups:", table(ss_primary$Methylation_Clusters), "\n")
 
-# Create SummarizedExperiment
 se <- SummarizedExperiment(betas, colData = ss_primary)
 
-# Quality control
 se_ok <- (checkLevels(assay(se), colData(se)$Sex) &
               checkLevels(assay(se), colData(se)$Methylation_Clusters))
 
@@ -89,14 +82,12 @@ cat("Probes passing QC:", sum(se_ok), "out of", length(se_ok), "\n")
 se <- se[se_ok, ]
 cat("Final SE dimensions:", dim(se), "\n")
 
-# Set reference levels for LI
 colData(se)$Sex <- relevel(factor(colData(se)$Sex), "Female")
 colData(se)$Methylation_Clusters <- relevel(factor(colData(se)$Methylation_Clusters), "LI")
 
 cat("LI reference levels - Sex:", levels(colData(se)$Sex)[1],
     "Methylation_Clusters:", levels(colData(se)$Methylation_Clusters)[1], "\n")
 
-# Run LI reference analysis
 smry <- DML(se, ~Methylation_Clusters + Sex + Age,
             BPPARAM = BiocParallel::MulticoreParam(workers = N_WORKERS))
 res_li <- summaryExtractTest(smry)
@@ -109,24 +100,20 @@ saveRDS(res_li, file = file.path(DATA_DIR, "ped88_dm_cluster_li.rds"))
 cat("Cluster (LI reference) differential methylation completed:", dim(res_li), "\n")
 
 # ========================
-# ANALYSIS 2B: HIL REFERENCE
+# CLUSTERS: HIL REFERENCE
 # ========================
 cat("=== HIL REFERENCE CLUSTER ANALYSIS ===\n")
 
-# Load data
 ss <- read_excel(file.path(SS_DIR, "pediatric_master.xlsx"))
 ss_primary <- ss %>% filter(Lymph_Node == "F")
 betas <- readRDS(file.path(DATA_DIR, "ped_betas_primary_imputed.rds"))
 
-# Prepare sample data
 ss_primary$Age <- as.numeric(ss_primary$Age)
 ss_primary$Sex <- as.factor(ss_primary$Sex)
 ss_primary$Methylation_Clusters <- as.factor(ss_primary$Methylation_Clusters)
 
-# Create SummarizedExperiment
 se <- SummarizedExperiment(betas, colData = ss_primary)
 
-# Quality control
 se_ok <- (checkLevels(assay(se), colData(se)$Sex) &
               checkLevels(assay(se), colData(se)$Methylation_Clusters))
 
@@ -134,14 +121,12 @@ cat("Probes passing QC:", sum(se_ok), "out of", length(se_ok), "\n")
 se <- se[se_ok, ]
 cat("Final SE dimensions:", dim(se), "\n")
 
-# Set reference levels for HIL
 colData(se)$Sex <- relevel(factor(colData(se)$Sex), "Female")
 colData(se)$Methylation_Clusters <- relevel(factor(colData(se)$Methylation_Clusters), "HIL")
 
 cat("HIL reference levels - Sex:", levels(colData(se)$Sex)[1],
     "Methylation_Clusters:", levels(colData(se)$Methylation_Clusters)[1], "\n")
 
-# Run HIL reference analysis
 cat("Starting HIL reference DML analysis...\n")
 smry <- DML(se, ~Methylation_Clusters + Sex + Age,
             BPPARAM = BiocParallel::MulticoreParam(workers = N_WORKERS))
@@ -151,7 +136,6 @@ cat("Results dimensions:", dim(res_hil), "\n")
 cat("First few results:\n")
 print(head(res_hil, 3))
 
-# Save HIL results
 saveRDS(res_hil, file = file.path(DATA_DIR, "ped88_dm_cluster_hil.rds"))
 cat("Cluster (HIL reference) differential methylation completed:", dim(res_hil), "\n")
 
@@ -160,14 +144,10 @@ cat("Cluster (HIL reference) differential methylation completed:", dim(res_hil),
 # ========================
 cat("=== MULTIPLE TESTING CORRECTION ===\n")
 
-cat("Applying Benjamini-Hochberg correction...\n")
-
-# Clinical invasiveness BH correction
-cat("Processing Clinical invasiveness results for BH correction...\n")
+cat("Processing invasiveness results for BH correction...\n")
 if ("Pval_Clinical_InvasivenessHigh" %in% colnames(res_inv)) {
     res_inv$BH_Clinical_InvasivenessHigh <- p.adjust(res_inv$Pval_Clinical_InvasivenessHigh, method = "BH")
     cat("Adjusted", nrow(res_inv), "p-values for Clinical_Invasiveness\n")
-
     saveRDS(res_inv, file.path(DATA_DIR, "ped88_dm_invasiveness_bh.rds"))
 } else {
     cat("Warning: Pval_Clinical_InvasivenessHigh column not found in Clinical_Invasiveness results\n")
@@ -200,11 +180,6 @@ n <- nrow(res_li)
 res_li$BH_Methylation_ClustersHI <- adjusted_all_pvals[1:n]
 res_li$BH_Methylation_ClustersHIL <- adjusted_all_pvals[(n+1):(2*n)]
 res_hil$BH_Methylation_ClustersHI <- adjusted_all_pvals[(2*n+1):(3*n)]
-
-cat("Significant results summary:\n")
-cat("LI vs HI:", sum(res_li$BH_Methylation_ClustersHI < 0.05, na.rm = TRUE), "significant CpGs\n")
-cat("LI vs HIL:", sum(res_li$BH_Methylation_ClustersHIL < 0.05, na.rm = TRUE), "significant CpGs\n")
-cat("HIL vs HI:", sum(res_hil$BH_Methylation_ClustersHI < 0.05, na.rm = TRUE), "significant CpGs\n")
 
 saveRDS(res_li, file.path(DATA_DIR, "ped88_dm_cluster_li_bh.rds"))
 saveRDS(res_hil, file.path(DATA_DIR, "ped88_dm_cluster_hil_bh.rds"))
