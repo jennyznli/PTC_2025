@@ -5,7 +5,6 @@
 data/
 figures/
 archive/
-ss/
 loocv_driver_model/
 loocv_invasiveness_model/
 ss/archive/
@@ -19,6 +18,8 @@ secrets.txt
 .RData
 .Rproj.user/
 .Rproj/
+.DS_Store
+.Rapp.history
 
 # Ignore Python virtual environments
 venv/

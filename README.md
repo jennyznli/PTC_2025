@@ -1,8 +1,4 @@
 ---
-editor_options: 
-  markdown: 
-    wrap: 72
----
 
 # DNA Methylation-based Prognosis of Pediatric Thyroid Carcinoma Invasiveness
 
