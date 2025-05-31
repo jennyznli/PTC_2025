@@ -9,6 +9,7 @@ project_root/
 ├── ss/                                 # All samplesheets 
 ├── scripts/                            # All analysis scripts
 ├── R/                                  # Helper scripts
+├── models/                             # Final models
 ├── data/                               # Data files created in analysis
 │   ├── IDAT/                           # IDAT files
 │   ├── loocv_invasiveness_model/       
